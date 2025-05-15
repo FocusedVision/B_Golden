@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const { logger } = require('../utils/logger');
-const db = require('../config/db');
+const db = require('../config/database');
 const bcrypt = require('bcrypt');
 
 /**
@@ -19,20 +19,19 @@ router.post('/register', async (req, res) => {
         if (!email || !password) {
             return res.status(400).json({
                 success: false,
-                error: 'Email and password are required'
+                error: 'Email and password are required',
             });
         }
 
         // Check if email already exists
-        const { rows: [existingUser] } = await db.query(
-            'SELECT 1 FROM users WHERE email = $1',
-            [email]
-        );
+        const {
+            rows: [existingUser],
+        } = await db.query('SELECT 1 FROM users WHERE email = $1', [email]);
 
         if (existingUser) {
             return res.status(400).json({
                 success: false,
-                error: 'Email already registered'
+                error: 'Email already registered',
             });
         }
 
@@ -41,7 +40,10 @@ router.post('/register', async (req, res) => {
         const passwordHash = await bcrypt.hash(password, saltRounds);
 
         // Create user
-        const { rows: [newUser] } = await db.query(`
+        const {
+            rows: [newUser],
+        } = await db.query(
+            `
             INSERT INTO users (
                 email,
                 password_hash,
@@ -51,14 +53,16 @@ router.post('/register', async (req, res) => {
                 status
             ) VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING id, email, first_name, last_name, role
-        `, [email, passwordHash, firstName, lastName, role, 'active']);
+        `,
+            [email, passwordHash, firstName, lastName, role, 'active']
+        );
 
         // Create JWT token
         const token = jwt.sign(
             {
                 id: newUser.id,
                 email: newUser.email,
-                role: newUser.role
+                role: newUser.role,
             },
             process.env.JWT_SECRET,
             { expiresIn: process.env.JWT_EXPIRY || '24h' }
@@ -73,15 +77,15 @@ router.post('/register', async (req, res) => {
                     email: newUser.email,
                     firstName: newUser.first_name,
                     lastName: newUser.last_name,
-                    role: newUser.role
-                }
-            }
+                    role: newUser.role,
+                },
+            },
         });
     } catch (error) {
         logger.error('Signup error:', error);
         res.status(500).json({
             success: false,
-            error: 'Failed to create user'
+            error: 'Failed to create user',
         });
     }
 });
@@ -100,20 +104,22 @@ router.post('/login', async (req, res) => {
         if (!email || !password) {
             return res.status(400).json({
                 success: false,
-                error: 'Email and password are required'
+                error: 'Email and password are required',
             });
         }
 
         // Get user from database
-        const { rows: [user] } = await db.query(
-            'SELECT * FROM users WHERE email = $1 AND status = $2',
-            [email, 'active']
-        );
+        const {
+            rows: [user],
+        } = await db.query('SELECT * FROM users WHERE email = $1 AND status = $2', [
+            email,
+            'active',
+        ]);
 
         if (!user) {
             return res.status(401).json({
                 success: false,
-                error: 'Invalid credentials'
+                error: 'Invalid credentials',
             });
         }
 
@@ -122,7 +128,7 @@ router.post('/login', async (req, res) => {
         if (!isValidPassword) {
             return res.status(401).json({
                 success: false,
-                error: 'Invalid credentials'
+                error: 'Invalid credentials',
             });
         }
 
@@ -130,20 +136,15 @@ router.post('/login', async (req, res) => {
         const tokenPayload = {
             id: user.id,
             email: user.email,
-            role: user.role
+            role: user.role,
         };
 
-        const token = jwt.sign(
-            tokenPayload,
-            process.env.JWT_SECRET,
-            { expiresIn: process.env.JWT_EXPIRY || '24h' }
-        );
+        const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
+            expiresIn: process.env.JWT_EXPIRY || '24h',
+        });
 
         // Update last login
-        await db.query(
-            'UPDATE users SET last_login_at = NOW() WHERE id = $1',
-            [user.id]
-        );
+        await db.query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]);
 
         res.json({
             success: true,
@@ -155,16 +156,16 @@ router.post('/login', async (req, res) => {
                     firstName: user.first_name,
                     lastName: user.last_name,
                     role: user.role,
-                }
-            }
+                },
+            },
         });
     } catch (error) {
         logger.error('Login error:', error);
         res.status(500).json({
             success: false,
-            error: 'Failed to login'
+            error: 'Failed to login',
         });
     }
 });
 
-module.exports = router; 
+module.exports = router;
