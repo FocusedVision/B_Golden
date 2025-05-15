@@ -1,9 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const jwt = require('jsonwebtoken');
-const { logger } = require('../utils/logger');
-const db = require('../config/database');
-const bcrypt = require('bcrypt');
+const User = require('../models/User');
+const auth = require('../middleware/auth');
+const logger = require('../utils/logger');
 
 /**
  * @route POST /api/auth/register
@@ -15,78 +14,25 @@ router.post('/register', async (req, res) => {
     try {
         const { email, password, firstName, lastName, role = 'staff' } = req.body;
 
-        // Validate input
-        if (!email || !password) {
-            return res.status(400).json({
-                success: false,
-                error: 'Email and password are required',
-            });
-        }
-
-        // Check if email already exists
-        const {
-            rows: [existingUser],
-        } = await db.query('SELECT 1 FROM users WHERE email = $1', [email]);
-
+        // Check if user already exists
+        const existingUser = await User.findByEmail(email);
         if (existingUser) {
-            return res.status(400).json({
-                success: false,
-                error: 'Email already registered',
-            });
+            return res.status(400).json({ error: 'Email already registered' });
         }
 
-        // Hash password
-        const saltRounds = 10;
-        const passwordHash = await bcrypt.hash(password, saltRounds);
-
-        // Create user
-        const {
-            rows: [newUser],
-        } = await db.query(
-            `
-            INSERT INTO users (
-                email,
-                password_hash,
-                first_name,
-                last_name,
-                role,
-                status
-            ) VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING id, email, first_name, last_name, role
-        `,
-            [email, passwordHash, firstName, lastName, role, 'active']
-        );
-
-        // Create JWT token
-        const token = jwt.sign(
-            {
-                id: newUser.id,
-                email: newUser.email,
-                role: newUser.role,
-            },
-            process.env.JWT_SECRET,
-            { expiresIn: process.env.JWT_EXPIRY || '24h' }
-        );
-
-        res.status(201).json({
-            success: true,
-            data: {
-                token,
-                user: {
-                    id: newUser.id,
-                    email: newUser.email,
-                    firstName: newUser.first_name,
-                    lastName: newUser.last_name,
-                    role: newUser.role,
-                },
-            },
+        // Create new user
+        const result = await User.createUser({
+            email,
+            password,
+            first_name: firstName,
+            last_name: lastName,
+            role,
         });
+
+        res.status(201).json(result);
     } catch (error) {
-        logger.error('Signup error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to create user',
-        });
+        logger.error('Registration error:', error);
+        res.status(500).json({ error: 'Registration failed' });
     }
 });
 
@@ -99,72 +45,44 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
     try {
         const { email, password } = req.body;
-
-        // Validate input
-        if (!email || !password) {
-            return res.status(400).json({
-                success: false,
-                error: 'Email and password are required',
-            });
-        }
-
-        // Get user from database
-        const {
-            rows: [user],
-        } = await db.query('SELECT * FROM users WHERE email = $1 AND status = $2', [
-            email,
-            'active',
-        ]);
-
-        if (!user) {
-            return res.status(401).json({
-                success: false,
-                error: 'Invalid credentials',
-            });
-        }
-
-        // Check password
-        const isValidPassword = await bcrypt.compare(password, user.password_hash);
-        if (!isValidPassword) {
-            return res.status(401).json({
-                success: false,
-                error: 'Invalid credentials',
-            });
-        }
-
-        // Create JWT token
-        const tokenPayload = {
-            id: user.id,
-            email: user.email,
-            role: user.role,
-        };
-
-        const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
-            expiresIn: process.env.JWT_EXPIRY || '24h',
-        });
+        const result = await User.authenticate(email, password);
 
         // Update last login
-        await db.query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]);
+        await User.updateLastLogin(result.user.id);
 
-        res.json({
-            success: true,
-            data: {
-                token,
-                user: {
-                    id: user.id,
-                    email: user.email,
-                    firstName: user.first_name,
-                    lastName: user.last_name,
-                    role: user.role,
-                },
-            },
-        });
+        res.json(result);
     } catch (error) {
         logger.error('Login error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to login',
-        });
+        res.status(401).json({ error: 'Invalid credentials' });
+    }
+});
+
+// Change password
+router.post('/change-password', auth(), async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+        await User.updatePassword(req.user.id, currentPassword, newPassword);
+        res.json({ message: 'Password updated successfully' });
+    } catch (error) {
+        logger.error('Password change error:', error);
+        res.status(400).json({ error: error.message });
+    }
+});
+
+// Get current user
+router.get('/me', auth(), async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Remove sensitive data
+        const { ...userWithoutPassword } = user;
+        res.json(userWithoutPassword);
+    } catch (error) {
+        logger.error('Get user error:', error);
+        res.status(500).json({ error: 'Failed to get user data' });
     }
 });
 

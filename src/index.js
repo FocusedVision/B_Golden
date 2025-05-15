@@ -1,26 +1,42 @@
 require('dotenv').config();
-require('./routes/auth');
 const express = require('express');
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 const { pool } = require('./config/database');
 const logger = require('./utils/logger');
 const BigQuerySync = require('./services/BigQuerySync');
 const cron = require('node-cron');
+const authRoutes = require('./routes/auth');
 
 // Initialize express app
 const app = express();
 
+// Rate limiting
+const limiter = rateLimit({
+    windowMs: process.env.RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000, // 15 minutes
+    max: process.env.RATE_LIMIT_MAX_REQUESTS || 100, // limit each IP to 100 requests per windowMs
+});
 
 // Middleware
-app.use(cors());
+app.use(
+    cors({
+        origin: process.env.CORS_ORIGIN || '*',
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+        allowedHeaders: ['Content-Type', 'Authorization'],
+    })
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(limiter);
 
 // Request logging middleware
 app.use((req, res, next) => {
     logger.info(`${req.method} ${req.url}`);
     next();
 });
+
+// Routes
+app.use('/api/auth', authRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -49,7 +65,7 @@ app.use((err, req, res) => {
 
 // Schedule BigQuery sync job
 // Run every day at midnight
-cron.schedule('0 0 * * *', async () => {
+cron.schedule(process.env.BIGQUERY_SYNC_SCHEDULE || '0 0 * * *', async () => {
     try {
         logger.info('Starting scheduled BigQuery sync...');
         const syncedCount = await BigQuerySync.syncTenantData();
@@ -61,42 +77,34 @@ cron.schedule('0 0 * * *', async () => {
 
 // Start server
 const PORT = process.env.PORT || 3000;
-const server = app.listen(PORT, () => {
+app.listen(PORT, () => {
     logger.info(`Server is running on port ${PORT}`);
     logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 
 // Handle graceful shutdown
-const shutdown = async () => {
-    logger.info('Shutting down server...');
-    
-    // Stop all sync jobs
-    syncScheduler.stopAllJobs();
-    logger.info('Sync jobs stopped');
-    
-    server.close(async () => {
-        try {
-            await pool.end();
-            logger.info('Database connections closed');
-            process.exit(0);
-        } catch (error) {
-            logger.error('Error during shutdown:', error);
-            process.exit(1);
-        }
-    });
-};
+process.on('SIGTERM', async () => {
+    logger.info('SIGTERM received. Starting graceful shutdown...');
+    await pool.end();
+    logger.info('Database pool closed');
+    process.exit(0);
+});
 
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+process.on('SIGINT', async () => {
+    logger.info('SIGINT received. Starting graceful shutdown...');
+    await pool.end();
+    logger.info('Database pool closed');
+    process.exit(0);
+});
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
     logger.error('Uncaught Exception:', error);
-    shutdown();
+    process.exit(1);
 });
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {
     logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
-    shutdown();
+    process.exit(1);
 });
