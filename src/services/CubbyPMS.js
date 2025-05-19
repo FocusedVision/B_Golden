@@ -9,11 +9,11 @@ const RETRY_CONFIG = {
     maxRetries: 3,
     initialDelay: 1000, // 1 second
     maxDelay: 10000, // 10 seconds
-    backoffFactor: 2
+    backoffFactor: 2,
 };
 
 // Utility function for exponential backoff
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Retry wrapper function
 async function withRetry(operation, operationName) {
@@ -25,14 +25,16 @@ async function withRetry(operation, operationName) {
             return await operation();
         } catch (error) {
             lastError = error;
-            
+
             // Don't retry if it's a validation error or authentication error
             if (error.response?.status === 400 || error.response?.status === 401) {
                 throw error;
             }
 
             if (attempt < RETRY_CONFIG.maxRetries) {
-                logger.warn(`${operationName} failed (attempt ${attempt}/${RETRY_CONFIG.maxRetries}). Retrying in ${delay}ms...`);
+                logger.warn(
+                    `${operationName} failed (attempt ${attempt}/${RETRY_CONFIG.maxRetries}). Retrying in ${delay}ms...`
+                );
                 await sleep(delay);
                 delay = Math.min(delay * RETRY_CONFIG.backoffFactor, RETRY_CONFIG.maxDelay);
             }
@@ -58,12 +60,12 @@ class CubbyPMS {
 
         // Add response interceptor for error handling and metrics
         this.client.interceptors.response.use(
-            response => {
+            (response) => {
                 const duration = Date.now() - response.config.startTime;
                 metrics.trackApiCall(response.config.url, true, duration);
                 return response;
             },
-            error => {
+            (error) => {
                 const duration = Date.now() - error.config.startTime;
                 metrics.trackApiCall(error.config.url, false, duration);
 
@@ -71,12 +73,12 @@ class CubbyPMS {
                     logger.error('Cubby API Error:', {
                         status: error.response.status,
                         data: error.response.data,
-                        url: error.config.url
+                        url: error.config.url,
                     });
                 } else if (error.request) {
                     logger.error('Cubby API No Response:', {
                         url: error.config.url,
-                        message: error.message
+                        message: error.message,
                     });
                 } else {
                     logger.error('Cubby API Request Error:', error.message);
@@ -87,11 +89,11 @@ class CubbyPMS {
 
         // Add request interceptor to track start time
         this.client.interceptors.request.use(
-            config => {
+            (config) => {
                 config.startTime = Date.now();
                 return config;
             },
-            error => {
+            (error) => {
                 return Promise.reject(error);
             }
         );
@@ -138,7 +140,9 @@ class CubbyPMS {
 
                         // Validate required fields
                         if (!tenantData.name || !tenantData.unit_number) {
-                            logger.warn(`Skipping tenant sync - missing required fields: ${JSON.stringify(tenantData)}`);
+                            logger.warn(
+                                `Skipping tenant sync - missing required fields: ${JSON.stringify(tenantData)}`
+                            );
                             failureCount++;
                             continue;
                         }
@@ -160,7 +164,9 @@ class CubbyPMS {
                     }
                 }
 
-                logger.info(`Tenant sync completed for facility ${facilityId}. Success: ${successCount}, Failures: ${failureCount}`);
+                logger.info(
+                    `Tenant sync completed for facility ${facilityId}. Success: ${successCount}, Failures: ${failureCount}`
+                );
                 return { successCount, failureCount, total: tenants.length };
             }, `Sync tenants for facility ${facilityId}`);
 
@@ -200,7 +206,9 @@ class CubbyPMS {
 
                         // Validate required fields
                         if (!facilityData.id || !facilityData.name) {
-                            logger.warn(`Skipping facility sync - missing required fields: ${JSON.stringify(facilityData)}`);
+                            logger.warn(
+                                `Skipping facility sync - missing required fields: ${JSON.stringify(facilityData)}`
+                            );
                             failureCount++;
                             continue;
                         }
@@ -224,7 +232,9 @@ class CubbyPMS {
                     }
                 }
 
-                logger.info(`Facility sync completed. Success: ${successCount}, Failures: ${failureCount}`);
+                logger.info(
+                    `Facility sync completed. Success: ${successCount}, Failures: ${failureCount}`
+                );
                 return { successCount, failureCount, total: facilities.length };
             }, 'Sync facilities');
 

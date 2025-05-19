@@ -12,6 +12,7 @@ const logger = require('../utils/logger');
 
 router.post('/register', async (req, res) => {
     try {
+        console.log('Registering a new user');
         const { email, password, firstName, lastName, role = 'staff' } = req.body;
 
         // Check if user already exists

@@ -9,6 +9,7 @@ const CubbyPMS = require('./services/CubbyPMS');
 const cron = require('node-cron');
 const authRoutes = require('./routes/auth');
 const cubbyRoutes = require('./routes/cubby');
+const gmbRoutes = require('./routes/gmb');
 
 // Initialize express app
 const app = express();
@@ -40,6 +41,7 @@ app.use((req, res, next) => {
 // Routes
 app.use('/auth', authRoutes);
 app.use('/cubby', cubbyRoutes);
+app.use('/gmb', gmbRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

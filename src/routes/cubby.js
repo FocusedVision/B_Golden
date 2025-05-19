@@ -32,14 +32,14 @@ router.post('/sync/facilities', auth(), async (req, res) => {
             details: {
                 successCount: result.successCount,
                 failureCount: result.failureCount,
-                total: result.total
-            }
+                total: result.total,
+            },
         });
     } catch (error) {
         logger.error('Facility sync failed:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             error: 'Failed to sync facilities',
-            details: error.message
+            details: error.message,
         });
     }
 });
@@ -52,14 +52,14 @@ router.post('/sync/tenants/:facilityId', auth(), async (req, res) => {
             details: {
                 successCount: result.successCount,
                 failureCount: result.failureCount,
-                total: result.total
-            }
+                total: result.total,
+            },
         });
     } catch (error) {
         logger.error('Tenant sync failed:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             error: 'Failed to sync tenants',
-            details: error.message
+            details: error.message,
         });
     }
 });
@@ -71,9 +71,9 @@ router.get('/tenants/:tenantId', auth(), async (req, res) => {
         res.json(tenant);
     } catch (error) {
         logger.error('Failed to get tenant details:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             error: 'Failed to get tenant details',
-            details: error.message
+            details: error.message,
         });
     }
 });
@@ -85,9 +85,9 @@ router.get('/facilities/:facilityId', auth(), async (req, res) => {
         res.json(facility);
     } catch (error) {
         logger.error('Failed to get facility details:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             error: 'Failed to get facility details',
-            details: error.message
+            details: error.message,
         });
     }
 });
@@ -99,9 +99,9 @@ router.get('/metrics', auth(), async (req, res) => {
         res.json(metricsData);
     } catch (error) {
         logger.error('Failed to get metrics:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             error: 'Failed to get metrics',
-            details: error.message
+            details: error.message,
         });
     }
 });
@@ -112,9 +112,9 @@ router.get('/health', auth(), async (req, res) => {
         res.json(healthStatus);
     } catch (error) {
         logger.error('Failed to get health status:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             error: 'Failed to get health status',
-            details: error.message
+            details: error.message,
         });
     }
 });

@@ -22,7 +22,7 @@ class User extends BaseModel {
         const { ...userWithoutPassword } = userData;
         const user = await this.create({
             ...userWithoutPassword,
-            password_hash: hashedPassword,
+            password: hashedPassword,
         });
 
         return this.generateAuthToken(user);
@@ -35,7 +35,7 @@ class User extends BaseModel {
             throw new Error('Invalid credentials');
         }
 
-        const isValidPassword = await bcrypt.compare(password, user.password_hash);
+        const isValidPassword = await bcrypt.compare(password, user.password);
 
         if (!isValidPassword) {
             throw new Error('Invalid credentials');
