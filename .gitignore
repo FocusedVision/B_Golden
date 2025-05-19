@@ -1,23 +1,58 @@
 # Dependencies
 node_modules/
-/.pnp
-.pnp.js
-yarn.lock
-package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Testing
+coverage/
+
+# Production build
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Google Cloud credentials
+*-credentials.json
+*-key.json
+
+# Temporary files
+*.tmp
+*.temp
 
 # Testing
 /coverage
 .nyc_output
 
 # Production
-/build
-/dist
 /out
 /.next
 
 # Environment files
-.env
-.env.local
 .env.development.local
 .env.test.local
 .env.production.local
@@ -61,7 +96,6 @@ coverage.xml
 
 # Java
 *.class
-*.log
 *.jar
 *.war
 *.nar
@@ -75,7 +109,6 @@ target/
 build/
 
 # Misc
-*.log
 *.sql
 *.sqlite
 *.db 

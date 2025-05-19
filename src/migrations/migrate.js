@@ -1,75 +1,42 @@
 require('dotenv').config();
-const fs = require('fs').promises;
+const fs = require('fs');
 const path = require('path');
-const { pool } = require('../config/db');
-const { logger } = require('../utils/logger');
-const bcrypt = require('bcrypt');
+const { pool } = require('../config/database');
 
-async function migrate() {
-    const client = await pool.connect();
-
+async function runMigrations() {
     try {
-        // Start transaction
-        await client.query('BEGIN');
+        // Create migrations table if it doesn't exist
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS migrations (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                executed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
 
-         // Read and execute schema.sql
-         const schemaPath = path.join(__dirname, 'schema.sql');
-         const schemaSql = await fs.readFile(schemaPath, 'utf8');
-         
-         logger.info('Applying database migrations...');
-         await client.query(schemaSql);
+        // Read and execute schema.sql
+        const schemaPath = path.join(__dirname, 'schema.sql');
+        const schemaSQL = fs.readFileSync(schemaPath, 'utf8');
 
-          // Create triggers for all tables that need updated_at
-        const tables = [
-            'users',
-        ];
+        // Split the schema into individual statements
+        const statements = schemaSQL
+            .split(';')
+            .map((statement) => statement.trim())
+            .filter((statement) => statement.length > 0);
 
-        for (const table of tables) {
-            await client.query(`
-                CREATE TRIGGER update_${table}_updated_at
-                    BEFORE UPDATE ON ${table}
-                    FOR EACH ROW
-                    EXECUTE FUNCTION update_updated_at_column();
-            `);
+        // Execute each statement
+        for (const statement of statements) {
+            await pool.query(statement);
         }
 
-        // Insert example data
-        logger.info('Inserting example data...');
-
-        // Example User
-        const saltRounds = 10; // Or a value from your config
-        const plainPassword = '123456';
-        const hashedPassword = bcrypt.hashSync(plainPassword, saltRounds);
-
-        await client.query(
-            "INSERT INTO users (email, password_hash, first_name, last_name, role, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
-            ['yevhenii.kotov@goldenreputation.io', hashedPassword, 'Yevhenii', 'Kotov', 'admin', 'active']
-        );
-
-        logger.info('Example data inserted successfully.');
-
-        // Commit transaction
-        await client.query('COMMIT');
-        logger.info('Database migration completed successfully');
-        
+        console.log('Migrations completed successfully');
+        process.exit(0);
     } catch (error) {
-        await client.query('ROLLBACK');
-        logger.error('Migration failed:', error);
-        throw error;
-    } finally {
-        client.release();
+        console.error('Migration failed:', error);
+        process.exit(1);
     }
 }
 
-// Run migration if this file is executed directly
-if (require.main === module) {
-    migrate().then(() => {
-        logger.info('Migration completed');
-        process.exit(0);
-    }).catch((error) => {
-        logger.error('Migration failed:', error);
-        process.exit(1);
-    });
-}
+runMigrations();
 
-module.exports = migrate; 
+module.exports = runMigrations;

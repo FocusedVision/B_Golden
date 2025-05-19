@@ -1,99 +1,122 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { pool } = require('./config/db');
-const { logger, requestLogger } = require('./utils/logger');
 const rateLimit = require('express-rate-limit');
-
+const { pool } = require('./config/database');
+const logger = require('./utils/logger');
+const BigQuerySync = require('./services/BigQuerySync');
+const CubbyPMS = require('./services/CubbyPMS');
+const cron = require('node-cron');
 const authRoutes = require('./routes/auth');
+const cubbyRoutes = require('./routes/cubby');
+const gmbRoutes = require('./routes/gmb');
 
-// Create Express app
+// Initialize express app
 const app = express();
 
-// Global rate limiting
-const globalLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100 // limit each IP to 100 requests per windowMs
+// Rate limiting
+const limiter = rateLimit({
+    windowMs: process.env.RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000, // 15 minutes
+    max: process.env.RATE_LIMIT_MAX_REQUESTS || 100, // limit each IP to 100 requests per windowMs
 });
 
-const PORT = process.env.PORT || 3000;
-
-// Global middleware
-app.use(cors());
+// Middleware
+app.use(
+    cors({
+        origin: process.env.CORS_ORIGIN || '*',
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+        allowedHeaders: ['Content-Type', 'Authorization'],
+    })
+);
 app.use(express.json());
-app.use(requestLogger);
-app.use(globalLimiter);
+app.use(express.urlencoded({ extended: true }));
+app.use(limiter);
 
-// API routes
-app.use('/api/auth', authRoutes);
+// Request logging middleware
+app.use((req, res, next) => {
+    logger.info(`${req.method} ${req.url}`);
+    next();
+});
 
+// Routes
+app.use('/auth', authRoutes);
+app.use('/cubby', cubbyRoutes);
+app.use('/gmb', gmbRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    res.json({ status: 'ok' });
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-    logger.error('Unhandled error:', err);
-    res.status(500).json({
-        success: false,
-        error: process.env.NODE_ENV === 'production' 
-            ? 'An unexpected error occurred' 
-            : err.message
-    });
-});
-
-// 404 handler
-app.use((req, res) => {
-    res.status(404).json({
-        success: false,
-        error: 'Route not found'
-    });
-});
-
-async function startServer() {
+// Database health check
+app.get('/health/db', async (req, res) => {
     try {
-        // Test database connection
-        await pool.query('SELECT NOW()');
-        logger.info('Database connection successful');
-
-        // Start the server
-        const server = app.listen(PORT, () => {
-            logger.info(`Server running on port ${PORT}`);
-        });
-
-        // Graceful shutdown handler
-        const shutdown = async () => {
-            logger.info('Shutting down server...');
-            
-            server.close(async () => {
-                try {
-                    await pool.end();
-                    logger.info('Database connections closed');
-                    process.exit(0);
-                } catch (error) {
-                    logger.error('Error during shutdown:', error);
-                    process.exit(1);
-                }
-            });
-
-            // Force shutdown after 10 seconds
-            setTimeout(() => {
-                logger.error('Could not close connections in time, forcing shutdown');
-                process.exit(1);
-            }, 10000);
-        };
-
-        // Handle shutdown signals
-        process.on('SIGTERM', shutdown);
-        process.on('SIGINT', shutdown);
-
+        await pool.query('SELECT 1');
+        res.json({ status: 'ok' });
     } catch (error) {
-        logger.error('Failed to start server:', error);
+        logger.error('Database health check failed:', error);
+        res.status(500).json({ status: 'error', message: 'Database connection failed' });
+    }
+});
+
+// Initialize services
+async function initializeServices() {
+    try {
+        // await CubbyPMS.initialize();
+        logger.info('All services initialized successfully');
+    } catch (error) {
+        logger.error('Service initialization failed:', error);
         process.exit(1);
     }
 }
+
+// Schedule BigQuery sync job
+// Run every day at every midnight
+cron.schedule(process.env.BIGQUERY_SYNC_SCHEDULE || '0 0 * * *', async () => {
+    try {
+        logger.info('Starting scheduled BigQuery sync...');
+        const syncedCount = await BigQuerySync.syncTenantData();
+        logger.info(
+            `BigQuery sync completed. Synced Tenants: ${syncedCount.tenants} and Facilities: ${syncedCount.facilities} records.`
+        );
+    } catch (error) {
+        logger.error('Scheduled BigQuery sync failed:', error);
+    }
+});
+
+// Schedule Cubby PMS sync job
+// Run every 6 hours
+cron.schedule(process.env.CUBBY_SYNC_SCHEDULE || '0 */6 * * *', async () => {
+    try {
+        logger.info('Starting scheduled Cubby PMS sync...');
+        const facilityCount = await CubbyPMS.syncFacilities();
+        logger.info(`Cubby PMS sync completed. Synced ${facilityCount} facilities.`);
+    } catch (error) {
+        logger.error('Scheduled Cubby PMS sync failed:', error);
+    }
+});
+
+// Start server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, async () => {
+    await initializeServices();
+    logger.info(`Server is running on port ${PORT}`);
+});
+
+// Handle graceful shutdown
+process.on('SIGTERM', async () => {
+    logger.info('SIGTERM received. Starting graceful shutdown...');
+    await pool.end();
+    logger.info('Database pool closed');
+    process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+    logger.info('SIGINT received. Starting graceful shutdown...');
+    await pool.end();
+    logger.info('Database pool closed');
+    process.exit(0);
+});
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
@@ -106,6 +129,3 @@ process.on('unhandledRejection', (reason, promise) => {
     logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
     process.exit(1);
 });
-
-// Start the server
-startServer();
