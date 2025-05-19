@@ -5,8 +5,10 @@ const rateLimit = require('express-rate-limit');
 const { pool } = require('./config/database');
 const logger = require('./utils/logger');
 const BigQuerySync = require('./services/BigQuerySync');
+const CubbyPMS = require('./services/CubbyPMS');
 const cron = require('node-cron');
 const authRoutes = require('./routes/auth');
+const cubbyRoutes = require('./routes/cubby');
 
 // Initialize express app
 const app = express();
@@ -36,50 +38,67 @@ app.use((req, res, next) => {
 });
 
 // Routes
-app.use('/api/auth', authRoutes);
+app.use('/auth', authRoutes);
+app.use('/cubby', cubbyRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-    res.json({ status: 'healthy' });
+    res.json({ status: 'ok' });
 });
 
 // Database health check
 app.get('/health/db', async (req, res) => {
     try {
         await pool.query('SELECT 1');
-        res.json({ status: 'healthy', database: 'connected' });
+        res.json({ status: 'ok' });
     } catch (error) {
         logger.error('Database health check failed:', error);
-        res.status(500).json({ status: 'unhealthy', database: 'disconnected' });
+        res.status(500).json({ status: 'error', message: 'Database connection failed' });
     }
 });
 
-// Error handling middleware
-app.use((err, req, res) => {
-    logger.error('Unhandled error:', err);
-    res.status(500).json({
-        error: 'Internal Server Error',
-        message: process.env.NODE_ENV === 'development' ? err.message : undefined,
-    });
-});
+// Initialize services
+async function initializeServices() {
+    try {
+        // await CubbyPMS.initialize();
+        logger.info('All services initialized successfully');
+    } catch (error) {
+        logger.error('Service initialization failed:', error);
+        process.exit(1);
+    }
+}
 
 // Schedule BigQuery sync job
-// Run every day at midnight
+// Run every day at every midnight
 cron.schedule(process.env.BIGQUERY_SYNC_SCHEDULE || '0 0 * * *', async () => {
     try {
         logger.info('Starting scheduled BigQuery sync...');
         const syncedCount = await BigQuerySync.syncTenantData();
-        logger.info(`BigQuery sync completed. Synced ${syncedCount} records.`);
+        logger.info(
+            `BigQuery sync completed. Synced Tenants: ${syncedCount.tenants} and Facilities: ${syncedCount.facilities} records.`
+        );
     } catch (error) {
         logger.error('Scheduled BigQuery sync failed:', error);
     }
 });
 
+// Schedule Cubby PMS sync job
+// Run every 6 hours
+cron.schedule(process.env.CUBBY_SYNC_SCHEDULE || '0 */6 * * *', async () => {
+    try {
+        logger.info('Starting scheduled Cubby PMS sync...');
+        const facilityCount = await CubbyPMS.syncFacilities();
+        logger.info(`Cubby PMS sync completed. Synced ${facilityCount} facilities.`);
+    } catch (error) {
+        logger.error('Scheduled Cubby PMS sync failed:', error);
+    }
+});
+
 // Start server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
+    await initializeServices();
     logger.info(`Server is running on port ${PORT}`);
-    logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 
 // Handle graceful shutdown

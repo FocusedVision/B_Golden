@@ -3,11 +3,12 @@ const { pool } = require('../config/database');
 class BaseModel {
     constructor(tableName) {
         this.tableName = tableName;
+        this.pool = pool;
     }
 
     async findById(id) {
         const query = `SELECT * FROM ${this.tableName} WHERE id = $1`;
-        const result = await pool.query(query, [id]);
+        const result = await this.pool.query(query, [id]);
         return result.rows[0];
     }
 
@@ -26,7 +27,7 @@ class BaseModel {
 
         query += ` ORDER BY ${orderBy}`;
 
-        const result = await pool.query(query, values);
+        const result = await this.pool.query(query, values);
         return result.rows;
     }
 
@@ -36,12 +37,12 @@ class BaseModel {
         const placeholders = values.map((_, index) => `$${index + 1}`).join(', ');
 
         const query = `
-            INSERT INTO ${this.tableName} (${columns})
-            VALUES (${placeholders})
+            INSERT INTO ${this.tableName} (${columns}, created_at, updated_at)
+            VALUES (${placeholders}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             RETURNING *
         `;
 
-        const result = await pool.query(query, values);
+        const result = await this.pool.query(query, values);
         return result.rows[0];
     }
 
@@ -56,13 +57,13 @@ class BaseModel {
             RETURNING *
         `;
 
-        const result = await pool.query(query, values);
+        const result = await this.pool.query(query, values);
         return result.rows[0];
     }
 
     async delete(id) {
         const query = `DELETE FROM ${this.tableName} WHERE id = $1 RETURNING *`;
-        const result = await pool.query(query, [id]);
+        const result = await this.pool.query(query, [id]);
         return result.rows[0];
     }
 }
