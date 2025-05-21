@@ -147,7 +147,7 @@ function scheduleBigQueryJobs() {
     });
 
     // Book entries refresh - every 12 hours
-    scheduleJob('0 */12 * * *', async () => {
+    scheduleJob('* */12 * * *', async () => {
         try {
             logger.info('Starting scheduled book entries refresh...');
             const entries = await BigQuerySync.getBookEntries({ days: 7 });
