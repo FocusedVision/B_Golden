@@ -1,7 +1,7 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const { pool } = require('../config/database');
+const { pool } = require('../../config/database');
 
 async function runMigrations() {
     try {
@@ -15,7 +15,7 @@ async function runMigrations() {
         `);
 
         // Read and execute schema.sql
-        const schemaPath = path.join(__dirname, 'schema.sql');
+        const schemaPath = path.join(__dirname, '../schema.sql');
         const schemaSQL = fs.readFileSync(schemaPath, 'utf8');
 
         // Split the schema into individual statements

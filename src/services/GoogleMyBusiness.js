@@ -3,7 +3,14 @@ const logger = require('../utils/logger');
 const metrics = require('../utils/metrics');
 const GmbCredentials = require('../models/GmbCredentials');
 
+/**
+ * GoogleMyBusiness service for interacting with Google My Business API
+ * Handles authentication, account management, and location operations
+ */
 class GoogleMyBusiness {
+    /**
+     * Initialize GoogleMyBusiness service with required credentials
+     */
     constructor() {
         this.auth = new google.auth.GoogleAuth({
             keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS,
@@ -16,10 +23,13 @@ class GoogleMyBusiness {
         );
     }
 
+    /**
+     * Initialize Google My Business API clients
+     * @throws {Error} If initialization fails
+     */
     async initialize() {
         const startTime = Date.now();
         try {
-            // If we have stored credentials, use them
             if (this.userId) {
                 const tokens = await this.getStoredCredentials(this.userId);
                 if (tokens) {
@@ -32,14 +42,17 @@ class GoogleMyBusiness {
                 this.client = await this.auth.getClient();
             }
 
-            // Initialize the Google My Business API
-            this.gmb = google.mybusinessaccountmanagement({
+            this.gmbManagement = google.mybusinessaccountmanagement({
                 version: 'v1',
                 auth: this.client,
             });
 
-            // Initialize the Google My Business API v4 for reviews and insights
-            this.gmbV4 = google.mybusinessbusinessinformation({
+            this.gmbInfo = google.mybusinessbusinessinformation({
+                version: 'v1',
+                auth: this.client,
+            });
+
+            this.gmbProfile = google.businessprofileperformance({
                 version: 'v1',
                 auth: this.client,
             });
@@ -49,200 +62,102 @@ class GoogleMyBusiness {
         } catch (error) {
             metrics.trackApiCall('initialize', false, Date.now() - startTime);
             logger.error('Failed to initialize Google My Business API:', error);
-            throw error;
+            throw new Error(`Failed to initialize GMB API: ${error.message}`);
         }
     }
 
-    async getLocationReviews(placeId) {
-        const startTime = Date.now();
+    /**
+     * Retrieve stored GMB credentials for a user
+     * @param {string} userId - The user's ID
+     * @returns {Promise<Object|null>} The stored credentials or null if not found
+     */
+    async getStoredCredentials(userId) {
         try {
-            const response = await this.gmbV4.accounts.locations.reviews.list({
-                parent: `locations/${placeId}`,
-                pageSize: 100,
-                orderBy: 'createTime desc',
-            });
+            const credentials = await GmbCredentials.findByUserId(userId);
+            if (!credentials) {
+                return null;
+            }
 
-            metrics.trackApiCall('getLocationReviews', true, Date.now() - startTime);
-            return response.data.reviews || [];
-        } catch (error) {
-            metrics.trackApiCall('getLocationReviews', false, Date.now() - startTime);
-            logger.error(`Failed to fetch reviews for location ${placeId}:`, error);
-            throw error;
-        }
-    }
-
-    async createReviewLink(placeId) {
-        const startTime = Date.now();
-        try {
-            const reviewUrl = `https://search.google.com/local/writereview?placeid=${placeId}`;
-            metrics.trackApiCall('createReviewLink', true, Date.now() - startTime);
-            return reviewUrl;
-        } catch (error) {
-            metrics.trackApiCall('createReviewLink', false, Date.now() - startTime);
-            logger.error(`Failed to create review link for location ${placeId}:`, error);
-            throw error;
-        }
-    }
-
-    async getLocationDetails(placeId) {
-        const startTime = Date.now();
-        try {
-            const response = await this.gmbV4.accounts.locations.get({
-                name: `locations/${placeId}`,
-            });
-
-            metrics.trackApiCall('getLocationDetails', true, Date.now() - startTime);
-            return response.data;
-        } catch (error) {
-            metrics.trackApiCall('getLocationDetails', false, Date.now() - startTime);
-            logger.error(`Failed to fetch location details for ${placeId}:`, error);
-            throw error;
-        }
-    }
-
-    async verifyReviewExists(placeId, tenantEmail) {
-        const startTime = Date.now();
-        try {
-            const reviews = await this.getLocationReviews(placeId);
-            const exists = reviews.some(
-                (review) =>
-                    review.reviewer.profilePhotoUrl &&
-                    review.reviewer.profilePhotoUrl.includes(tenantEmail)
-            );
-
-            metrics.trackApiCall('verifyReviewExists', true, Date.now() - startTime);
-            return exists;
-        } catch (error) {
-            metrics.trackApiCall('verifyReviewExists', false, Date.now() - startTime);
-            logger.error(`Failed to verify review for ${placeId}:`, error);
-            throw error;
-        }
-    }
-
-    async getLocationInsights(placeId) {
-        const startTime = Date.now();
-        try {
-            const response = await this.gmbV4.accounts.locations.reportInsights({
-                name: `locations/${placeId}`,
-                requestBody: {
-                    basicRequest: {
-                        metricRequests: [{ metric: 'ALL' }],
-                        timeRange: {
-                            startTime: new Date(
-                                Date.now() - 30 * 24 * 60 * 60 * 1000
-                            ).toISOString(),
-                            endTime: new Date().toISOString(),
-                        },
-                    },
-                },
-            });
-
-            metrics.trackApiCall('getLocationInsights', true, Date.now() - startTime);
-            return response.data;
-        } catch (error) {
-            metrics.trackApiCall('getLocationInsights', false, Date.now() - startTime);
-            logger.error(`Failed to fetch insights for location ${placeId}:`, error);
-            throw error;
-        }
-    }
-
-    async respondToReview(placeId, reviewId, comment) {
-        const startTime = Date.now();
-        try {
-            await this.gmbV4.accounts.locations.reviews.updateReply({
-                name: `locations/${placeId}/reviews/${reviewId}`,
-                requestBody: {
-                    comment: comment,
-                },
-            });
-
-            metrics.trackApiCall('respondToReview', true, Date.now() - startTime);
-        } catch (error) {
-            metrics.trackApiCall('respondToReview', false, Date.now() - startTime);
-            logger.error(`Failed to respond to review ${reviewId} for location ${placeId}:`, error);
-            throw error;
-        }
-    }
-
-    async getReviewMetrics(placeId) {
-        const startTime = Date.now();
-        try {
-            const reviews = await this.getLocationReviews(placeId);
-
-            const metrics = {
-                total: reviews.length,
-                averageRating: 0,
-                ratingDistribution: {
-                    1: 0,
-                    2: 0,
-                    3: 0,
-                    4: 0,
-                    5: 0,
-                },
-                responseRate: 0,
-                recentReviews: reviews.slice(0, 5),
-            };
-
-            let totalRating = 0;
-            let respondedReviews = 0;
-
-            reviews.forEach((review) => {
-                const rating = review.starRating;
-                metrics.ratingDistribution[rating]++;
-                totalRating += rating;
-                if (review.reply) {
-                    respondedReviews++;
+            if (GmbCredentials.isExpired(credentials.expiry_date)) {
+                const newTokens = await this.refreshToken(credentials.refresh_token);
+                if (!newTokens) {
+                    return null;
                 }
-            });
+                await GmbCredentials.upsert(userId, newTokens);
+                return newTokens;
+            }
 
-            metrics.averageRating = totalRating / reviews.length;
-            metrics.responseRate = (respondedReviews / reviews.length) * 100;
-
-            metrics.trackApiCall('getReviewMetrics', true, Date.now() - startTime);
-            return metrics;
+            return credentials;
         } catch (error) {
-            metrics.trackApiCall('getReviewMetrics', false, Date.now() - startTime);
-            logger.error(`Failed to calculate review metrics for location ${placeId}:`, error);
-            throw error;
+            logger.error(`Failed to get stored credentials for user ${userId}:`, error);
+            return null;
         }
     }
 
-    async syncLocationData(placeId) {
+    /**
+     * Store GMB credentials for a user
+     * @param {string} userId - The user's ID
+     * @param {Object} tokens - The OAuth tokens
+     * @throws {Error} If storing credentials fails
+     */
+    async storeCredentials(userId, tokens) {
         const startTime = Date.now();
         try {
-            const [location, reviews, insights] = await Promise.all([
-                this.getLocationDetails(placeId),
-                this.getLocationReviews(placeId),
-                this.getLocationInsights(placeId),
-            ]);
-
-            const syncData = {
-                location,
-                reviews,
-                insights,
-                lastSynced: new Date().toISOString(),
+            const credentials = {
+                access_token: tokens.access_token,
+                refresh_token: tokens.refresh_token,
+                scope: tokens.scope,
+                token_type: tokens.token_type,
+                expiry_date: new Date(tokens.expiry_date),
             };
 
-            metrics.trackApiCall('syncLocationData', true, Date.now() - startTime);
-            return syncData;
+            await GmbCredentials.upsert(userId, credentials);
+            metrics.trackApiCall('storeCredentials', true, Date.now() - startTime);
+            logger.info(`Stored GMB credentials for user ${userId}`);
         } catch (error) {
-            metrics.trackApiCall('syncLocationData', false, Date.now() - startTime);
-            logger.error(`Failed to sync data for location ${placeId}:`, error);
-            throw error;
+            metrics.trackApiCall('storeCredentials', false, Date.now() - startTime);
+            logger.error(`Failed to store credentials for user ${userId}:`, error);
+            throw new Error(`Failed to store GMB credentials: ${error.message}`);
         }
     }
 
+    /**
+     * Get GMB account ID for the authenticated user
+     * @returns {Promise<string>} The account ID
+     * @throws {Error} If no accounts found or API call fails
+     */
+    async getAccountId() {
+        const startTime = Date.now();
+        try {
+            const response = await this.gmbManagement.accounts.list();
+
+            if (!response.data.accounts?.length) {
+                throw new Error('No GMB accounts found');
+            }
+            const accountId = response.data.accounts[0].name.split('/')[1];
+            metrics.trackApiCall('getAccountId', true, Date.now() - startTime);
+            return accountId;
+        } catch (error) {
+            metrics.trackApiCall('getAccountId', false, Date.now() - startTime);
+            logger.error('Failed to get GMB account ID:', error);
+            throw new Error(`Failed to get GMB account ID: ${error.message}`);
+        }
+    }
+
+    /**
+     * Check if user has valid GMB access
+     * @param {string} userId - The user's ID
+     * @returns {Promise<boolean>} Whether the user has valid GMB access
+     */
     async checkAccess(userId) {
         const startTime = Date.now();
         try {
-            // Check if user has stored GMB credentials
             const hasCredentials = await this.getStoredCredentials(userId);
             if (!hasCredentials) {
                 metrics.trackApiCall('checkAccess', false, Date.now() - startTime);
                 return false;
             }
 
-            // Verify credentials are still valid
             try {
                 await this.initialize();
                 metrics.trackApiCall('checkAccess', true, Date.now() - startTime);
@@ -258,6 +173,12 @@ class GoogleMyBusiness {
         }
     }
 
+    /**
+     * Generate GMB authentication URL
+     * @param {string} userId - The user's ID
+     * @returns {Promise<string>} The authentication URL
+     * @throws {Error} If URL generation fails
+     */
     async getAuthUrl(userId) {
         const startTime = Date.now();
         try {
@@ -265,10 +186,10 @@ class GoogleMyBusiness {
                 'https://www.googleapis.com/auth/business.manage',
                 'https://www.googleapis.com/auth/userinfo.email',
                 'https://www.googleapis.com/auth/userinfo.profile',
+                'https://www.googleapis.com/auth/plus.business.manage',
             ];
 
             const state = Buffer.from(JSON.stringify({ userId })).toString('base64');
-
             const authUrl = this.oauth2Client.generateAuthUrl({
                 access_type: 'offline',
                 scope: scopes,
@@ -281,71 +202,75 @@ class GoogleMyBusiness {
         } catch (error) {
             metrics.trackApiCall('getAuthUrl', false, Date.now() - startTime);
             logger.error(`Failed to generate auth URL for user ${userId}:`, error);
-            throw error;
+            throw new Error(`Failed to generate GMB auth URL: ${error.message}`);
         }
     }
 
+    /**
+     * Handle GMB authentication callback
+     * @param {string} code - The authorization code
+     * @param {string} state - The state parameter
+     * @returns {Promise<boolean>} Whether the callback was handled successfully
+     * @throws {Error} If callback handling fails
+     */
     async handleAuthCallback(code, state) {
         const startTime = Date.now();
         try {
             const { userId } = JSON.parse(Buffer.from(state, 'base64').toString());
-
             const { tokens } = await this.oauth2Client.getToken(code);
             await this.storeCredentials(userId, tokens);
-
             metrics.trackApiCall('handleAuthCallback', true, Date.now() - startTime);
             return true;
         } catch (error) {
             metrics.trackApiCall('handleAuthCallback', false, Date.now() - startTime);
             logger.error('Failed to handle auth callback:', error);
-            throw error;
+            throw new Error(`Failed to handle GMB auth callback: ${error.message}`);
         }
     }
 
-    async getStoredCredentials(userId) {
-        try {
-            const credentials = await GmbCredentials.findByUserId(userId);
-            if (!credentials) {
-                return null;
-            }
-
-            // Check if token is expired
-            if (GmbCredentials.isExpired(credentials.expiry_date)) {
-                // Refresh token
-                const newTokens = await this.refreshToken(credentials.refresh_token);
-                if (!newTokens) {
-                    return null;
-                }
-
-                // Store new tokens
-                await GmbCredentials.upsert(userId, newTokens);
-                return newTokens;
-            }
-
-            return credentials;
-        } catch (error) {
-            logger.error(`Failed to get stored credentials for user ${userId}:`, error);
-            return null;
-        }
-    }
-
-    async storeCredentials(userId, tokens) {
+    /**
+     * Get location details for a specific place
+     * @param {string} placeId - The Google Place ID
+     * @returns {Promise<Object>} The location details
+     * @throws {Error} If location details cannot be fetched
+     */
+    async getLocationDetails(placeId) {
         const startTime = Date.now();
         try {
-            const credentials = {
-                access_token: tokens.access_token,
-                refresh_token: tokens.refresh_token,
-                scope: tokens.scope,
-                token_type: tokens.token_type,
-                expiry_date: new Date(tokens.expiry_date)
-            };
+            const accountId = await this.getAccountId();
+            const response = await this.gmbInfo.accounts.locations.get({
+                name: `accounts/${accountId}/locations/${placeId}`,
+            });
 
-            await GmbCredentials.upsert(userId, credentials);
-            metrics.trackApiCall('storeCredentials', true, Date.now() - startTime);
-            logger.info(`Stored GMB credentials for user ${userId}`);
+            metrics.trackApiCall('getLocationDetails', true, Date.now() - startTime);
+            return response.data;
         } catch (error) {
-            metrics.trackApiCall('storeCredentials', false, Date.now() - startTime);
-            logger.error(`Failed to store credentials for user ${userId}:`, error);
+            metrics.trackApiCall('getLocationDetails', false, Date.now() - startTime);
+            logger.error(`Failed to fetch location details for ${placeId}:`, error);
+            throw new Error(`Failed to fetch location details: ${error.message}`);
+        }
+    }
+
+    /**
+     * Get reviews for a specific location
+     * @param {string} placeId - The Google Place ID
+     * @returns {Promise<Array>} The reviews
+     * @throws {Error} If reviews cannot be fetched
+     */
+    async getLocationReviews(placeId) {
+        const startTime = Date.now();
+        try {
+            const response = await this.gmbInfo.accounts.locations.reviews.list({
+                parent: `locations/${placeId}`,
+                pageSize: 100,
+                orderBy: 'createTime desc',
+            });
+
+            metrics.trackApiCall('getLocationReviews', true, Date.now() - startTime);
+            return response.data.reviews || [];
+        } catch (error) {
+            metrics.trackApiCall('getLocationReviews', false, Date.now() - startTime);
+            logger.error(`Failed to fetch reviews for location ${placeId}:`, error);
             throw error;
         }
     }

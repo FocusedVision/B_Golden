@@ -40,7 +40,7 @@ class GmbCredentials extends BaseModel {
                     credentials.refresh_token,
                     credentials.scope,
                     credentials.token_type,
-                    credentials.expiry_date
+                    credentials.expiry_date,
                 ]
             );
             return result.rows[0];
@@ -52,10 +52,7 @@ class GmbCredentials extends BaseModel {
 
     async deleteByUserId(userId) {
         try {
-            await this.pool.query(
-                'DELETE FROM gmb_credentials WHERE user_id = $1',
-                [userId]
-            );
+            await this.pool.query('DELETE FROM gmb_credentials WHERE user_id = $1', [userId]);
         } catch (error) {
             logger.error('Error deleting GMB credentials:', error);
             throw error;
@@ -67,4 +64,4 @@ class GmbCredentials extends BaseModel {
     }
 }
 
-module.exports = new GmbCredentials(); 
+module.exports = new GmbCredentials();
