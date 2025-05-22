@@ -16,8 +16,8 @@ class CustomerTouch extends BaseModel {
                 const values = Object.values(touch);
                 const placeholders = values.map((_, index) => `$${index + 1}`).join(', ');
                 const updateClause = Object.keys(touch)
-                    .filter(key => key !== 'ga_session' && key !== 'updated_at')
-                    .map(key => `${key} = EXCLUDED.${key}`)
+                    .filter((key) => key !== 'ga_session' && key !== 'updated_at')
+                    .map((key) => `${key} = EXCLUDED.${key}`)
                     .join(', ');
 
                 const query = `
@@ -44,4 +44,4 @@ class CustomerTouch extends BaseModel {
     }
 }
 
-module.exports = new CustomerTouch(); 
+module.exports = new CustomerTouch();

@@ -16,8 +16,8 @@ class Lead extends BaseModel {
                 const values = Object.values(lead);
                 const placeholders = values.map((_, index) => `$${index + 1}`).join(', ');
                 const updateClause = Object.keys(lead)
-                    .filter(key => key !== 'lead_id' && key !== 'updated_at')
-                    .map(key => `${key} = EXCLUDED.${key}`)
+                    .filter((key) => key !== 'lead_id' && key !== 'updated_at')
+                    .map((key) => `${key} = EXCLUDED.${key}`)
                     .join(', ');
 
                 const query = `
@@ -44,4 +44,4 @@ class Lead extends BaseModel {
     }
 }
 
-module.exports = new Lead(); 
+module.exports = new Lead();

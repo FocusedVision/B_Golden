@@ -16,8 +16,8 @@ class BookEntry extends BaseModel {
                 const values = Object.values(entry);
                 const placeholders = values.map((_, index) => `$${index + 1}`).join(', ');
                 const updateClause = Object.keys(entry)
-                    .filter(key => key !== 'txn_id')
-                    .map(key => `${key} = EXCLUDED.${key}`)
+                    .filter((key) => key !== 'txn_id')
+                    .map((key) => `${key} = EXCLUDED.${key}`)
                     .join(', ');
 
                 const query = `
@@ -44,4 +44,4 @@ class BookEntry extends BaseModel {
     }
 }
 
-module.exports = new BookEntry(); 
+module.exports = new BookEntry();

@@ -7,7 +7,6 @@ class Unit extends BaseModel {
     }
 
     async upsertMany(units) {
-        console.log('upsertMany', units);
         const client = await this.pool.connect();
         try {
             await client.query('BEGIN');
@@ -18,7 +17,7 @@ class Unit extends BaseModel {
                 const placeholders = values.map((_, index) => `$${index + 1}`).join(', ');
                 const updateClause = Object.keys(unit)
                     .filter((key) => key !== 'unit_id')
-                    .map((key, index) => `${key} = EXCLUDED.${key}`)
+                    .map((key) => `${key} = EXCLUDED.${key}`)
                     .join(', ');
 
                 const query = `

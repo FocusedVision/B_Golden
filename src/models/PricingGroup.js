@@ -16,8 +16,8 @@ class PricingGroup extends BaseModel {
                 const values = Object.values(group);
                 const placeholders = values.map((_, index) => `$${index + 1}`).join(', ');
                 const updateClause = Object.keys(group)
-                    .filter(key => key !== 'pg_id')
-                    .map(key => `${key} = EXCLUDED.${key}`)
+                    .filter((key) => key !== 'pg_id')
+                    .map((key) => `${key} = EXCLUDED.${key}`)
                     .join(', ');
 
                 const query = `
@@ -44,4 +44,4 @@ class PricingGroup extends BaseModel {
     }
 }
 
-module.exports = new PricingGroup(); 
+module.exports = new PricingGroup();

@@ -84,7 +84,7 @@ function createApp() {
     });
 
     // Error handling middleware
-    app.use((err, req, res, next) => {
+    app.use((err, req, res) => {
         logger.error('Unhandled error:', err);
         res.status(500).json({
             error: 'Internal server error',
@@ -115,45 +115,63 @@ async function initializeServices() {
 function scheduleBigQueryJobs() {
     // Unit occupancy refresh - hourly
     scheduleJob('0 * * * *', async () => {
+        const jobName = 'unit occupancy refresh';
+        logger.info(`Starting scheduled ${jobName}...`);
         try {
-            logger.info('Starting scheduled unit occupancy refresh...');
             const units = await BigQuerySync.getUnits();
-            logger.info(`Refreshed data for ${units.length} units`);
+            logger.info(`Successfully completed ${jobName} for ${units.length} units`);
         } catch (error) {
-            logger.error('Failed to refresh unit occupancy:', error);
+            logger.error(`Failed to complete ${jobName}:`, {
+                error: error.message,
+                stack: error.stack,
+            });
         }
     });
 
     // Payment data refresh - every 6 hours
     scheduleJob('0 */6 * * *', async () => {
+        const jobName = 'payment data refresh';
+        logger.info(`Starting scheduled ${jobName}...`);
         try {
-            logger.info('Starting scheduled payment data refresh...');
             const payments = await BigQuerySync.getPayments({ days: 7 });
-            logger.info(`Refreshed data for ${payments.length} recent payments`);
+            logger.info(`Successfully completed ${jobName} for ${payments.length} recent payments`);
         } catch (error) {
-            logger.error('Failed to refresh payment data:', error);
+            logger.error(`Failed to complete ${jobName}:`, {
+                error: error.message,
+                stack: error.stack,
+            });
         }
     });
 
     // Customer interactions refresh - daily
     scheduleJob('0 0 * * *', async () => {
+        const jobName = 'customer interactions refresh';
+        logger.info(`Starting scheduled ${jobName}...`);
         try {
-            logger.info('Starting scheduled customer interactions refresh...');
             const touches = await BigQuerySync.getCustomerTouches({ days: 1 });
-            logger.info(`Refreshed data for ${touches.length} customer interactions`);
+            logger.info(
+                `Successfully completed ${jobName} for ${touches.length} customer interactions`
+            );
         } catch (error) {
-            logger.error('Failed to refresh customer interactions:', error);
+            logger.error(`Failed to complete ${jobName}:`, {
+                error: error.message,
+                stack: error.stack,
+            });
         }
     });
 
     // Book entries refresh - every 12 hours
     scheduleJob('* */12 * * *', async () => {
+        const jobName = 'book entries refresh';
+        logger.info(`Starting scheduled ${jobName}...`);
         try {
-            logger.info('Starting scheduled book entries refresh...');
             const entries = await BigQuerySync.getBookEntries({ days: 7 });
-            logger.info(`Refreshed data for ${entries.length} book entries`);
+            logger.info(`Successfully completed ${jobName} for ${entries.length} book entries`);
         } catch (error) {
-            logger.error('Failed to refresh book entries:', error);
+            logger.error(`Failed to complete ${jobName}:`, {
+                error: error.message,
+                stack: error.stack,
+            });
         }
     });
 
@@ -254,27 +272,11 @@ function scheduleCubbySync() {
         try {
             logger.info('Starting scheduled Cubby PMS sync...');
             // const facilityCount = await CubbyPMS.syncFacilities();
-            logger.info(`Cubby PMS sync completed. Synced ${facilityCount} facilities.`);
+            logger.info(`Cubby PMS sync completed. Synced facilities.`);
         } catch (error) {
             logger.error('Scheduled Cubby PMS sync failed:', error);
         }
     });
-}
-
-/**
- * Handle graceful shutdown
- * @param {string} signal - The signal received
- */
-async function handleShutdown(signal) {
-    logger.info(`${signal} received. Starting graceful shutdown...`);
-    try {
-        await pool.end();
-        logger.info('Database pool closed');
-        process.exit(0);
-    } catch (error) {
-        logger.error('Error during shutdown:', error);
-        process.exit(1);
-    }
 }
 
 // Initialize application
@@ -307,11 +309,19 @@ process.on('SIGINT', async () => {
 
 // Handle uncaught errors
 process.on('uncaughtException', (error) => {
-    logger.error('Uncaught Exception:', error);
+    logger.error('Uncaught Exception:', {
+        error: error.message,
+        stack: error.stack,
+        timestamp: new Date().toISOString(),
+    });
     process.exit(1);
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-    logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+process.on('unhandledRejection', (reason) => {
+    logger.error('Unhandled Rejection:', {
+        reason: reason.message || reason,
+        stack: reason.stack,
+        timestamp: new Date().toISOString(),
+    });
     process.exit(1);
 });

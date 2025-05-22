@@ -16,8 +16,8 @@ class Lease extends BaseModel {
                 const values = Object.values(lease);
                 const placeholders = values.map((_, index) => `$${index + 1}`).join(', ');
                 const updateClause = Object.keys(lease)
-                    .filter(key => key !== 'lease_id')
-                    .map(key => `${key} = EXCLUDED.${key}`)
+                    .filter((key) => key !== 'lease_id')
+                    .map((key) => `${key} = EXCLUDED.${key}`)
                     .join(', ');
 
                 const query = `
@@ -44,4 +44,4 @@ class Lease extends BaseModel {
     }
 }
 
-module.exports = new Lease(); 
+module.exports = new Lease();

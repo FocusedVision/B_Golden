@@ -16,8 +16,8 @@ class Payment extends BaseModel {
                 const values = Object.values(payment);
                 const placeholders = values.map((_, index) => `$${index + 1}`).join(', ');
                 const updateClause = Object.keys(payment)
-                    .filter(key => key !== 'payment_id')
-                    .map(key => `${key} = EXCLUDED.${key}`)
+                    .filter((key) => key !== 'payment_id')
+                    .map((key) => `${key} = EXCLUDED.${key}`)
                     .join(', ');
 
                 const query = `
@@ -44,4 +44,4 @@ class Payment extends BaseModel {
     }
 }
 
-module.exports = new Payment(); 
+module.exports = new Payment();

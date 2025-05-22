@@ -16,8 +16,8 @@ class Contact extends BaseModel {
                 const values = Object.values(contact);
                 const placeholders = values.map((_, index) => `$${index + 1}`).join(', ');
                 const updateClause = Object.keys(contact)
-                    .filter(key => key !== 'contact_id' && key !== 'updated_at')
-                    .map(key => `${key} = EXCLUDED.${key}`)
+                    .filter((key) => key !== 'contact_id' && key !== 'updated_at')
+                    .map((key) => `${key} = EXCLUDED.${key}`)
                     .join(', ');
 
                 const query = `
@@ -44,4 +44,4 @@ class Contact extends BaseModel {
     }
 }
 
-module.exports = new Contact(); 
+module.exports = new Contact();

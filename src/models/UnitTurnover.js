@@ -16,8 +16,8 @@ class UnitTurnover extends BaseModel {
                 const values = Object.values(turnover);
                 const placeholders = values.map((_, index) => `$${index + 1}`).join(', ');
                 const updateClause = Object.keys(turnover)
-                    .filter(key => key !== 'id')
-                    .map(key => `${key} = EXCLUDED.${key}`)
+                    .filter((key) => key !== 'id')
+                    .map((key) => `${key} = EXCLUDED.${key}`)
                     .join(', ');
 
                 const query = `
@@ -44,4 +44,4 @@ class UnitTurnover extends BaseModel {
     }
 }
 
-module.exports = new UnitTurnover(); 
+module.exports = new UnitTurnover();

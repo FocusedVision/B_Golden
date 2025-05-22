@@ -16,8 +16,8 @@ class GAEvent extends BaseModel {
                 const values = Object.values(event);
                 const placeholders = values.map((_, index) => `$${index + 1}`).join(', ');
                 const updateClause = Object.keys(event)
-                    .filter(key => key !== 'ga_session_id')
-                    .map(key => `${key} = EXCLUDED.${key}`)
+                    .filter((key) => key !== 'ga_session_id')
+                    .map((key) => `${key} = EXCLUDED.${key}`)
                     .join(', ');
 
                 const query = `
@@ -44,4 +44,4 @@ class GAEvent extends BaseModel {
     }
 }
 
-module.exports = new GAEvent(); 
+module.exports = new GAEvent();

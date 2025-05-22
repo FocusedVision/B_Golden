@@ -16,8 +16,8 @@ class Manager extends BaseModel {
                 const values = Object.values(manager);
                 const placeholders = values.map((_, index) => `$${index + 1}`).join(', ');
                 const updateClause = Object.keys(manager)
-                    .filter(key => key !== 'manager_id')
-                    .map(key => `${key} = EXCLUDED.${key}`)
+                    .filter((key) => key !== 'manager_id')
+                    .map((key) => `${key} = EXCLUDED.${key}`)
                     .join(', ');
 
                 const query = `
@@ -44,4 +44,4 @@ class Manager extends BaseModel {
     }
 }
 
-module.exports = new Manager(); 
+module.exports = new Manager();

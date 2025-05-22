@@ -16,8 +16,8 @@ class SpaceHistorical extends BaseModel {
                 const values = Object.values(space);
                 const placeholders = values.map((_, index) => `$${index + 1}`).join(', ');
                 const updateClause = Object.keys(space)
-                    .filter(key => key !== 'id')
-                    .map(key => `${key} = EXCLUDED.${key}`)
+                    .filter((key) => key !== 'id')
+                    .map((key) => `${key} = EXCLUDED.${key}`)
                     .join(', ');
 
                 const query = `
@@ -44,4 +44,4 @@ class SpaceHistorical extends BaseModel {
     }
 }
 
-module.exports = new SpaceHistorical(); 
+module.exports = new SpaceHistorical();

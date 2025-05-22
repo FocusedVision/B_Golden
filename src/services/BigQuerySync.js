@@ -1,9 +1,9 @@
 /**
  * BigQuerySync Service
- * 
+ *
  * This service handles synchronization of data between BigQuery and the local database.
  * It provides methods to fetch and process data from various BigQuery views and tables.
- * 
+ *
  * @class BigQuerySync
  */
 const { BigQuery } = require('@google-cloud/bigquery');
@@ -57,7 +57,9 @@ class BigQuerySync {
      */
     constructor() {
         if (!process.env.GOOGLE_CLOUD_PROJECT || !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-            throw new Error('Required environment variables GOOGLE_CLOUD_PROJECT and GOOGLE_APPLICATION_CREDENTIALS must be set');
+            throw new Error(
+                'Required environment variables GOOGLE_CLOUD_PROJECT and GOOGLE_APPLICATION_CREDENTIALS must be set'
+            );
         }
 
         this.bigquery = new BigQuery({
@@ -66,6 +68,7 @@ class BigQuerySync {
         });
         this.datasetName = 'authorized_views';
         this.batchSize = parseInt(process.env.BIGQUERY_SYNC_BATCH_SIZE || '1000', 10);
+        logger.info('BigQuerySync initialized successfully');
     }
 
     /**
@@ -77,13 +80,22 @@ class BigQuerySync {
      */
     async executeQuery(operationName, queryConfig) {
         const startTime = Date.now();
+        logger.debug(`Executing ${operationName} query`);
+
         try {
             const [rows] = await this.bigquery.query(queryConfig);
-            metrics.trackApiCall(operationName, true, Date.now() - startTime);
+            const duration = Date.now() - startTime;
+            metrics.trackApiCall(operationName, true, duration);
+            logger.debug(`Successfully executed ${operationName} query in ${duration}ms`);
             return rows;
         } catch (error) {
-            metrics.trackApiCall(operationName, false, Date.now() - startTime);
-            logger.error(`Failed to execute ${operationName}:`, error);
+            const duration = Date.now() - startTime;
+            metrics.trackApiCall(operationName, false, duration);
+            logger.error(`Failed to execute ${operationName} query:`, {
+                error: error.message,
+                duration,
+                query: queryConfig.query,
+            });
             throw new Error(`Query execution failed: ${error.message}`);
         }
     }
@@ -96,13 +108,20 @@ class BigQuerySync {
      * @returns {Promise<void>}
      */
     async saveToDatabase(modelName, Model, data) {
-        if (!data || data.length === 0) return;
+        if (!data || data.length === 0) {
+            logger.debug(`No ${modelName} data to save`);
+            return;
+        }
 
+        logger.debug(`Saving ${data.length} ${modelName} to database`);
         try {
             await Model.upsertMany(data);
             logger.info(`Successfully saved ${data.length} ${modelName} to database`);
         } catch (error) {
-            logger.error(`Failed to save ${modelName} to database:`, error);
+            logger.error(`Failed to save ${modelName} to database:`, {
+                error: error.message,
+                count: data.length,
+            });
             throw new Error(`Database save failed: ${error.message}`);
         }
     }
@@ -113,7 +132,7 @@ class BigQuerySync {
      */
     async getViews() {
         return this.executeQuery('getViews', {
-            query: `SELECT * FROM \`${this.datasetName}.INFORMATION_SCHEMA.TABLES\` WHERE table_type = 'VIEW'`
+            query: `SELECT * FROM \`${this.datasetName}.INFORMATION_SCHEMA.TABLES\` WHERE table_type = 'VIEW'`,
         });
     }
 
@@ -151,7 +170,7 @@ class BigQuerySync {
 
         const rows = await this.executeQuery('getBookEntries', { query, params });
 
-        const processedRows = rows.map(row => ({
+        const processedRows = rows.map((row) => ({
             ...row,
             entry_date_time: processDateField(row, 'entry_date_time'),
             accrual_start: processDateField(row, 'accrual_start'),
@@ -160,7 +179,7 @@ class BigQuerySync {
             amt_payment: processNumericField(row, 'amt_payment'),
             amt_asset: processNumericField(row, 'amt_asset'),
             amt_liability: processNumericField(row, 'amt_liability'),
-            amt_transfer: processNumericField(row, 'amt_transfer')
+            amt_transfer: processNumericField(row, 'amt_transfer'),
         }));
 
         await this.saveToDatabase('book entries', BookEntry, processedRows);
@@ -190,11 +209,11 @@ class BigQuerySync {
 
         const rows = await this.executeQuery('getContacts', { query, params });
 
-        const processedRows = rows.map(row => ({
+        const processedRows = rows.map((row) => ({
             ...row,
             created_at: processDateField(row, 'created_at'),
             updated_at: processDateField(row, 'updated_at'),
-            date_of_birth: processDateField(row, 'date_of_birth')
+            date_of_birth: processDateField(row, 'date_of_birth'),
         }));
 
         await this.saveToDatabase('contacts', Contact, processedRows);
@@ -233,7 +252,9 @@ class BigQuerySync {
         }
         if (options.days) {
             params.days = parseInt(options.days, 10) || 30;
-            conditions.push('TIMESTAMP(created_at) >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @days DAY)');
+            conditions.push(
+                'TIMESTAMP(created_at) >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @days DAY)'
+            );
         }
 
         const query = `
@@ -245,10 +266,10 @@ class BigQuerySync {
 
         const rows = await this.executeQuery('getCustomerTouches', { query, params });
 
-        const processedRows = rows.map(row => ({
+        const processedRows = rows.map((row) => ({
             ...row,
             created_at: processDateField(row, 'created_at'),
-            updated_at: processDateField(row, 'updated_at')
+            updated_at: processDateField(row, 'updated_at'),
         }));
 
         await this.saveToDatabase('customer touches', CustomerTouch, processedRows);
@@ -299,9 +320,9 @@ class BigQuerySync {
 
         const rows = await this.executeQuery('getGAEvents', { query, params });
 
-        const processedRows = rows.map(row => ({
+        const processedRows = rows.map((row) => ({
             ...row,
-            event_date: processDateField(row, 'event_date')
+            event_date: processDateField(row, 'event_date'),
         }));
 
         await this.saveToDatabase('GA events', GAEvent, processedRows);
@@ -347,11 +368,11 @@ class BigQuerySync {
 
         const rows = await this.executeQuery('getLeads', { query, params });
 
-        const processedRows = rows.map(row => ({
+        const processedRows = rows.map((row) => ({
             ...row,
             created_at: processDateField(row, 'created_at'),
             updated_at: processDateField(row, 'updated_at'),
-            converted_datetime: processDateField(row, 'converted_datetime')
+            converted_datetime: processDateField(row, 'converted_datetime'),
         }));
 
         await this.saveToDatabase('leads', Lead, processedRows);
@@ -407,7 +428,7 @@ class BigQuerySync {
 
         const rows = await this.executeQuery('getLeases', { query, params });
 
-        const processedRows = rows.map(row => ({
+        const processedRows = rows.map((row) => ({
             ...row,
             lease_started: processDateField(row, 'lease_started'),
             lease_ended: processDateField(row, 'lease_ended'),
@@ -424,7 +445,7 @@ class BigQuerySync {
             lease_lifetime_payments: processNumericField(row, 'lease_lifetime_payments'),
             balance_ar: processNumericField(row, 'balance_ar'),
             balance_deposit: processNumericField(row, 'balance_deposit'),
-            balance_prepaid: processNumericField(row, 'balance_prepaid')
+            balance_prepaid: processNumericField(row, 'balance_prepaid'),
         }));
 
         await this.saveToDatabase('leases', Lease, processedRows);
@@ -501,11 +522,11 @@ class BigQuerySync {
 
         const rows = await this.executeQuery('getPayments', { query, params });
 
-        const processedRows = rows.map(row => ({
+        const processedRows = rows.map((row) => ({
             ...row,
             payment_date: processDateField(row, 'payment_date'),
             payment_datetime: processDateField(row, 'payment_datetime'),
-            payment_amount: processNumericField(row, 'payment_amount')
+            payment_amount: processNumericField(row, 'payment_amount'),
         }));
 
         await this.saveToDatabase('payments', Payment, processedRows);
@@ -535,12 +556,12 @@ class BigQuerySync {
 
         const rows = await this.executeQuery('getPricingGroups', { query, params });
 
-        const processedRows = rows.map(row => ({
+        const processedRows = rows.map((row) => ({
             ...row,
             price: processNumericField(row, 'price'),
             width: processNumericField(row, 'width'),
             height: processNumericField(row, 'height'),
-            depth: processNumericField(row, 'depth')
+            depth: processNumericField(row, 'depth'),
         }));
 
         await this.saveToDatabase('pricing groups', PricingGroup, processedRows);
@@ -586,7 +607,7 @@ class BigQuerySync {
 
         const rows = await this.executeQuery('getSpacesHistorical', { query, params });
 
-        const processedRows = rows.map(row => ({
+        const processedRows = rows.map((row) => ({
             ...row,
             date: processDateField(row, 'date'),
             occ_start_dt: processDateField(row, 'occ_start_dt'),
@@ -594,7 +615,7 @@ class BigQuerySync {
             depth: processNumericField(row, 'depth'),
             height: processNumericField(row, 'height'),
             street_rate: processNumericField(row, 'street_rate'),
-            occ_rate: processNumericField(row, 'occ_rate')
+            occ_rate: processNumericField(row, 'occ_rate'),
         }));
 
         await this.saveToDatabase('spaces historical', SpaceHistorical, processedRows);
@@ -640,7 +661,7 @@ class BigQuerySync {
 
         const rows = await this.executeQuery('getUnitTurnover', { query, params });
 
-        const processedRows = rows.map(row => ({
+        const processedRows = rows.map((row) => ({
             ...row,
             move_date: processDateField(row, 'move_date'),
             lease_start_date: processDateField(row, 'lease_start_date'),
@@ -651,7 +672,7 @@ class BigQuerySync {
             lease_rent: processNumericField(row, 'lease_rent'),
             ins_premium: processNumericField(row, 'ins_premium'),
             ins_coverage_level: processNumericField(row, 'ins_coverage_level'),
-            pg_standard_rate: processNumericField(row, 'pg_standard_rate')
+            pg_standard_rate: processNumericField(row, 'pg_standard_rate'),
         }));
 
         await this.saveToDatabase('unit turnover', UnitTurnover, processedRows);
@@ -691,12 +712,12 @@ class BigQuerySync {
 
         const rows = await this.executeQuery('getUnits', { query, params });
 
-        const processedRows = rows.map(row => ({
+        const processedRows = rows.map((row) => ({
             ...row,
             rate_managed: processNumericField(row, 'rate_managed'),
             unit_width: processNumericField(row, 'unit_width'),
             unit_depth: processNumericField(row, 'unit_depth'),
-            unit_height: processNumericField(row, 'unit_height')
+            unit_height: processNumericField(row, 'unit_height'),
         }));
 
         await this.saveToDatabase('units', Unit, processedRows);
